@@ -4,14 +4,40 @@ const SH = ['▲', '◆', '●', '■'];
 const fix = st => { st.t = Date.now() - st.elapsed; return st; };
 const left = st => Math.max(0, st.time - (Date.now() - st.t) / 1000);
 
+// Sons feitos no navegador (sem arquivos). Só tocam depois de um clique do usuário.
+let AC = null;
+function som(tipo) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const seq = { ok: [[660, .1], [880, .18]], erro: [[220, .3]], tic: [[800, .05]], go: [[523, .1], [659, .1], [784, .2]], fim: [[523, .12], [659, .12], [784, .12], [1047, .35]] }[tipo] || [];
+    let t = AC.currentTime;
+    seq.forEach(([f, d]) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(.15, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+      o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d); t += d;
+    });
+  } catch (e) {}
+}
+
 function drawRank(list, myName) {
   const r = $('#rank'); r.textContent = '';
   if (!list.length) { r.appendChild(h('li', 'wait', 'Aguardando jogadores…')); return; }
   list.forEach((p, i) => {
     const li = h('li', p.name === myName ? 'me' : '');
-    li.append(h('span', 'pos', ['🥇', '🥈', '🥉'][i] || String(i + 1)), h('span', 'nm', p.emoji + ' ' + p.name), h('span', 'sc', String(p.score)));
+    li.append(h('span', 'pos' + (i < 3 ? ' top' + (i + 1) : ''), String(i + 1)), h('span', 'av', p.emoji), h('span', 'nm', p.name), h('span', 'sc', String(p.score)));
     r.appendChild(li);
   });
+}
+
+function drawCountdown(app, st) {
+  app.append(h('h2', 'center', `Pergunta ${st.qi + 1} de ${st.total}`), h('p', 'center', 'Prepare-se'));
+  const n = h('div', 'cdn', String(Math.max(1, Math.ceil(st.cd - (Date.now() - st.t) / 1000)))); n.id = 'cdn';
+  app.appendChild(n);
+}
+
+function drawDestaque(app, st) {
+  if (st.destaque) app.appendChild(h('p', 'destaque', `${st.destaque.emoji} ${st.destaque.name} foi quem mais subiu: +${st.destaque.up} posição(ões)`));
 }
 
 function drawQuestion(app, st, { play, choice, answered, onPick }) {
@@ -36,7 +62,7 @@ function drawQuestion(app, st, { play, choice, answered, onPick }) {
 }
 
 function podium(app, list) {
-  app.appendChild(h('h2', 'center', '🏁 Fim de jogo!'));
+  app.appendChild(h('h2', 'center', 'Resultado final'));
   const pd = h('div', 'podium');
   [[1, 'p2'], [0, 'p1'], [2, 'p3']].forEach(([i, c]) => {
     const p = list[i]; if (!p) return;
@@ -53,10 +79,15 @@ function podium(app, list) {
   }
 }
 
-// Atualiza barra e contagem sem redesenhar a tela
+// Atualiza barra, contagem e "3, 2, 1" sem redesenhar a tela
 setInterval(() => {
-  const st = window.ST; if (!st || st.phase !== 'q') return;
-  const l = left(st), b = $('#bar'), s = $('#sec');
-  if (b) b.style.width = l / st.time * 100 + '%';
-  if (s) s.textContent = Math.ceil(l);
+  const st = window.ST; if (!st) return;
+  if (st.phase === 'q') {
+    const l = left(st), b = $('#bar'), s = $('#sec');
+    if (b) { b.style.width = l / st.time * 100 + '%'; b.classList.toggle('low', l <= 5); }
+    if (s) s.textContent = Math.ceil(l);
+  } else if (st.phase === 'cd') {
+    const n = Math.max(1, Math.ceil(st.cd - (Date.now() - st.t) / 1000)), e = $('#cdn');
+    if (e && e.textContent !== String(n)) { e.textContent = n; som('tic'); }
+  }
 }, 250);
